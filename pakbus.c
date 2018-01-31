@@ -32,6 +32,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <my_stdio.h>
+#include <zmq.hpp>
 
 #include "pakbus.h"
 #include "rs232.h"
@@ -892,6 +893,8 @@ static int pak_fprintf_table(GC_CONF *gc, CR_TDF *tdf, PAKBUS *pki,
 	char str_tstamp[256];
 	uint32_t record;
 	FILE *stream = GC_GET_STREAM_OUT(gc);
+	// added by Tolga Yapici for ZMQ app
+	std::string zmq_package = "[data-push] ";
 	
 	do {
 		tblnbr = pak_read_short(pki);
@@ -910,42 +913,49 @@ static int pak_fprintf_table(GC_CONF *gc, CR_TDF *tdf, PAKBUS *pki,
 				tm_tstamp = gmtime( &tstamp);
 				strftime(str_tstamp, sizeof(str_tstamp),
 					 GC_TSTAMP_FMT(gc), tm_tstamp);
-				fprintf(stream, "%s ", str_tstamp);
+				fprintf(stream, "%s,", str_tstamp);
+				// added by Tolga Yapici for ZMQ app
+				zmq_package.append("%s,", str_tstamp);
 			} else {
-				fprintf(stream, "%ld ", tstamp);
+				fprintf(stream, "%ld,", tstamp);
+				// added by Tolga Yapici for ZMQ app
+				zmq_package.append("%ld ", tstamp);
 			}
 			/* Record: */
 			/* 12/06/2013: Fortmat change from %5d to %10d */
-			fprintf(stream, "%10d ", record++);
+			fprintf(stream, "%10d,", record++);
+			// added by Tolga Yapici for ZMQ app
+			zmq_package.append("%10d,", record++);
 
 			for(field=CR_TDF_FIELD_LIST(tdf);
 			    field != NULL;field = CR_TDF_FIELD_NEXT(field)) {
 				if (CR_TDF_FIELD_DIM_ARRAY(field)[0] == 1 ) {
 					switch(CR_TDF_FIELD_TYPE(field)) {
 					case type_FP2:
-						fprintf(stream, "%8.2f ",
-							pak_read_fp2(pki));
+					        fprintf(stream, "%8.2f ", pak_read_fp2(pki));							
+						zmq_package.append("%8.2f,", pak_read_fp2(pki));
 						break;
 					case type_IEEE4:
-						fprintf(stream, "%8.3f ",
-							pak_read_float(pki));
+						fprintf(stream, "%8.3f ", pak_read_float(pki));
+						zmq_package.append("%8.3f,", pak_read_float(pki));
 						break;
 					case type_Int4:
-						fprintf(stream, "%8d ",
-							pak_read_int(pki));
+						fprintf(stream, "%8d ", pak_read_int(pki));
+						zmq_package.append("%8d,", pak_read_int(pki));
 						break;
 					case type_NSec:
 						dummy = pak_read_int(pki);
-						fprintf(stream, "%8d.%09d ",
-							dummy, 
-							pak_read_int(pki));
+						fprintf(stream, "%8d.%09d ", dummy, pak_read_int(pki));
+						zmq_package.append("%8d.%09d,", dummy, pak_read_int(pki));
 						break;
 					case type_Bool4:
 						dummy = pak_read_int(pki);
-						if(dummy > 0) 
-							fprintf(stream, "true ");
-						else
-							fprintf(stream, "false ");
+						if(dummy > 0) {
+			                            fprintf(stream, "true ");
+						    zmq_package.append("True,")
+					        } else {
+			                            fprintf(stream, "false ");
+						    zmq_package.append("False,")
 						break;
 					default:
 						fprintf(stream, "unknow_%02d ", 
@@ -961,6 +971,11 @@ static int pak_fprintf_table(GC_CONF *gc, CR_TDF *tdf, PAKBUS *pki,
 	CR_TDF_LAST_RECORD_READ(tdf) = record;
 	PAKBUS_READ_INDEX(pki) = current_index;
 
+	zmq::context_t context(1);
+	zmq::socket_t publisher(context, ZMQ_PUB);
+	publisher.bind("tcp://127.0.0.1:7559");
+	publisher.send(zmq_package);
+	
 	return 0;
 }
 

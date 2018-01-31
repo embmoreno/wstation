@@ -1,5 +1,7 @@
 TARGET=$$HOME
 
+CPPZMQLIB_LOCATION=/usr/local/lib # this is a hardcoded path. need to change to get from environment variables later.
+CPPZMQINC_LOCATION=/usr/local/include
 
 CFLAGS = -O2 -Wall
 # host libertad is my debuger platform 
@@ -28,6 +30,9 @@ LIBS=-liarcontrol
 STATIC_LIBS=
 endif
 ###
+
+LIBS += -L${CPPZMQLIB_LOCATION} -lzmq
+CFLAGS += -I${CPPZMQINC_LOCATION}
 
 #LIBOBJS=my_stdio.o flags.o parse_line_conf.o
 
